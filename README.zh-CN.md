@@ -1,7 +1,7 @@
 # yuketang-homework-exporter
 
 <p align="center">
-  <img src="assets/release-cover.svg" alt="yuketang-homework-exporter cover" width="100%">
+  <img src="assets/release-cover.png" alt="yuketang-homework-exporter cover" width="100%">
 </p>
 
 <p align="center">

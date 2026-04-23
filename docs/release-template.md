@@ -84,6 +84,6 @@ Highlights:
 
 如果你准备给 release 配图或附件，可以考虑：
 
-- `assets/release-cover.svg`
+- `assets/release-cover.png`
 - 打包后的源码压缩包
 - 如果你以后做了 GUI 版，也可以把可执行文件挂在这里
