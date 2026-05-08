@@ -253,6 +253,26 @@ python export_yuketang_homework.py --course-url "你的课程链接" --docx-name
 python export_yuketang_homework.py --course-url "你的课程链接" --limit-homeworks 1
 ```
 
+### `--leaf-id`
+
+可选。
+
+只导出指定 `leaf_id` 的一份作业。适合你已经拿到某个作业页面链接时精确导出，例如：
+
+```bash
+python export_yuketang_homework.py --course-url "你的作业链接" --classroom-id 24237213 --leaf-id 42267833
+```
+
+### `--homework-filter`
+
+可选。
+
+只导出章节名或作业名中包含指定文本的作业，例如：
+
+```bash
+python export_yuketang_homework.py --course-url "你的课程链接" --homework-filter "第9章 作业1"
+```
+
 ### `--save-raw`
 
 可选。

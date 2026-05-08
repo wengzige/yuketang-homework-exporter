@@ -39,6 +39,8 @@ class Settings:
     save_raw: bool
     save_images: bool
     include_source_url: bool
+    leaf_id: int | None
+    homework_filter: str | None
     limit_homeworks: int | None
     headless: bool
     startup_wait: float
@@ -127,6 +129,15 @@ def parse_args() -> Settings:
         help="仅处理前 N 份作业，用于调试。",
     )
     parser.add_argument(
+        "--leaf-id",
+        type=int,
+        help="仅导出指定 leaf_id 的作业，适合从 exercise 链接中精确选中某一次作业。",
+    )
+    parser.add_argument(
+        "--homework-filter",
+        help="仅导出标题包含该文本的作业，会匹配章节名和作业名。",
+    )
+    parser.add_argument(
         "--save-raw",
         action="store_true",
         help="保存原始接口 JSON 到 output/raw_json。",
@@ -178,6 +189,8 @@ def parse_args() -> Settings:
         save_raw=args.save_raw,
         save_images=args.save_images,
         include_source_url=args.include_source_url,
+        leaf_id=args.leaf_id,
+        homework_filter=args.homework_filter,
         limit_homeworks=args.limit_homeworks,
         headless=not args.no_headless,
         startup_wait=args.startup_wait,
@@ -361,6 +374,10 @@ def render_problem_image(driver, problem_index: int, image_path: Path) -> None:
         }
 
         const fontUrl = data.font || "";
+        const fontIdMatch = fontUrl.match(/exam_font_([A-Za-z0-9]+)/);
+        const fontId = fontIdMatch ? fontIdMatch[1] : `${Date.now()}-${problemIndex}`;
+        const fontFamily = `codex-exam-data-decrypt-font-${fontId}`;
+        const safeFontUrl = fontUrl;
         let style = document.getElementById("codex-problem-style");
         if (!style) {
           style = document.createElement("style");
@@ -368,7 +385,7 @@ def render_problem_image(driver, problem_index: int, image_path: Path) -> None:
           document.head.appendChild(style);
         }
         style.textContent = `
-          @font-face { font-family: "exam-data-decrypt-font"; src: url("${fontUrl}"); }
+          @font-face { font-family: "${fontFamily}"; src: url("${safeFontUrl}") format("truetype"); }
           html, body { margin: 0; padding: 0; background: #ffffff; }
           body { padding: 24px; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #0f172a; }
           #codex-problem-card { width: 1120px; padding: 26px 30px; border: 1px solid #dbe3ef; border-radius: 18px; background: #ffffff; }
@@ -385,7 +402,7 @@ def render_problem_image(driver, problem_index: int, image_path: Path) -> None:
             border: 2px solid #94a3b8; border-radius: 8px; background: #f8fafc; text-align: center;
           }
           #codex-problem-card .xuetangx-com-encrypted-font {
-            font-family: "exam-data-decrypt-font" !important;
+            font-family: "${fontFamily}" !important;
           }
           #codex-problem-card img { max-width: 100%; height: auto; }
           #codex-problem-card table { border-collapse: collapse; }
@@ -417,6 +434,7 @@ def render_problem_image(driver, problem_index: int, image_path: Path) -> None:
         });
 
         Promise.all([
+          document.fonts && safeFontUrl ? document.fonts.load(`30px "${fontFamily}"`) : Promise.resolve(),
           document.fonts ? document.fonts.ready : Promise.resolve(),
           Promise.all(imagePromises),
           new Promise((resolve) => setTimeout(resolve, 300)),
@@ -484,6 +502,22 @@ def result_text(problem: dict[str, Any]) -> str:
     return "未知"
 
 
+def is_full_score(problem: dict[str, Any]) -> bool:
+    try:
+        earned = float(problem.get("user", {}).get("my_score", 0) or 0)
+        total = float(problem.get("score", 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    return total > 0 and abs(earned - total) < 1e-6
+
+
+def official_answer_from_problem(problem: dict[str, Any]) -> tuple[str, str]:
+    answer_text = answer_from_problem(problem)
+    if problem.get("user", {}).get("is_right") is True and is_full_score(problem):
+        return answer_text, "平台判定该作答正确且该题满分；接口未单独开放标准答案字段。"
+    return "未开放，且无法从本次作答确认", "平台未返回标准答案字段，且该题不是满分正确作答。"
+
+
 def set_run_font(run) -> None:
     run.font.name = "Microsoft YaHei"
     run.font.size = Pt(11)
@@ -519,9 +553,11 @@ def add_homework_to_doc(
         document.add_picture(str(image_path), width=Inches(5.9))
 
         answer_text = answer_from_problem(problem)
+        official_answer, official_source = official_answer_from_problem(problem)
         score_text = f"{problem.get('user', {}).get('my_score', '0')} / {problem.get('score', 0)}"
-        add_text_paragraph(document, "答案来源：我的作答")
-        add_text_paragraph(document, f"作答内容：{answer_text}")
+        add_text_paragraph(document, f"官方答案：{official_answer}")
+        add_text_paragraph(document, f"答案依据：{official_source}")
+        add_text_paragraph(document, f"我的作答：{answer_text}")
         add_text_paragraph(document, f"平台判定：{result_text(problem)}    得分：{score_text}")
 
 
@@ -542,7 +578,7 @@ def prepare_document(settings: Settings) -> Document:
         add_text_paragraph(document, f"来源页面：{settings.course_url}")
     add_text_paragraph(
         document,
-        "说明：题目截图按网页原始加密字体渲染；官方答案未开放时，采用你的作答结果。",
+        "说明：题目截图按网页原始加密字体渲染；若平台未单独开放标准答案字段，则仅在该题被平台判定正确且满分时，将你的作答作为官方正确答案。",
     )
     return document
 
@@ -591,8 +627,28 @@ def main() -> int:
             )
 
         homeworks = collect_homeworks(chapter_payload["data"]["course_chapter"])
+        if settings.leaf_id is not None:
+            homeworks = [
+                homework
+                for homework in homeworks
+                if int(homework["leaf_id"]) == settings.leaf_id
+            ]
+        if settings.homework_filter:
+            keyword = re.sub(r"\s+", "", settings.homework_filter).lower()
+            homeworks = [
+                homework
+                for homework in homeworks
+                if keyword
+                in re.sub(
+                    r"\s+",
+                    "",
+                    f"{homework['chapter_name']}{homework['name']}",
+                ).lower()
+            ]
         if settings.limit_homeworks:
             homeworks = homeworks[: settings.limit_homeworks]
+        if not homeworks:
+            raise RuntimeError("未找到匹配的作业，请检查 --leaf-id 或 --homework-filter。")
         print(f"找到 {len(homeworks)} 份作业。")
 
         for idx, homework in enumerate(homeworks, start=1):

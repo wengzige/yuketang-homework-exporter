@@ -66,6 +66,7 @@ Full English documentation: [README.en.md](README.en.md).
 - No manual cookie or token copying
 - Works with `Edge` and `Chrome`
 - Solves encrypted font rendering by using browser-rendered screenshots
+- Supports full-course export or targeted export by assignment `leaf_id` / title filter
 - Outputs a Word document that is easier to review, archive, or print
 - Defaults to a privacy-friendlier workflow: no raw JSON or image dumps unless explicitly requested
 

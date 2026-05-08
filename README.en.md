@@ -239,6 +239,26 @@ Only process the first N assignments. Good for testing:
 python export_yuketang_homework.py --course-url "your course URL" --limit-homeworks 1
 ```
 
+### `--leaf-id`
+
+Optional.
+
+Only export one assignment with the specified `leaf_id`. This is useful when you already have a specific assignment page URL, for example:
+
+```bash
+python export_yuketang_homework.py --course-url "your assignment URL" --classroom-id 24237213 --leaf-id 42267833
+```
+
+### `--homework-filter`
+
+Optional.
+
+Only export assignments whose chapter name or assignment name contains the given text, for example:
+
+```bash
+python export_yuketang_homework.py --course-url "your course URL" --homework-filter "Chapter 9 Assignment 1"
+```
+
 ### `--save-raw`
 
 Optional.
